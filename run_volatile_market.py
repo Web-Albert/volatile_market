@@ -205,13 +205,13 @@ def save_volatile_strategy_results(results, strategy, save_dir="volatile_strateg
             '最低BTC仓位比例', '最大BTC仓位比例', '初始资金', '交易手续费',
             '新闻信号高阈值', '新闻信号低阈值',
             'ADX计算周期', 'ADX低阈值', 'ADX高阈值',
-            '弱趋势买入阈值', '弱趋势卖出阈值', '弱趋势基础仓位比例',
-            '弱趋势止盈比例', '弱趋势止损比例',
             '中等趋势买入阈值', '中等趋势卖出阈值', '中等趋势基础仓位比例',
             '中等趋势止盈比例', '中等趋势止损比例',
             '强趋势买入阈值', '强趋势卖出阈值', '强趋势基础仓位比例',
             '强趋势止盈比例', '强趋势止损比例',
-            'MA周期', '支撑位买入比例', '压力位卖出比例', 'MA触及阈值'
+            'MA周期', '中等趋势支撑位加仓比例', '中等趋势压力位减仓比例',
+            '强趋势支撑位加仓比例', '强趋势压力位减仓比例',
+            '周跌幅阈值', '周跌幅加仓比例'
         ],
         '参数值': [
             f"{strategy.min_btc_ratio:.2%}",
@@ -223,11 +223,6 @@ def save_volatile_strategy_results(results, strategy, save_dir="volatile_strateg
             f"{strategy.adx_period}",
             f"{strategy.adx_low_threshold}",
             f"{strategy.adx_high_threshold}",
-            f"{strategy.weak_trend_buy_threshold:.2f}",
-            f"{strategy.weak_trend_sell_threshold:.2f}",
-            f"{strategy.weak_trend_base_ratio:.2%}",
-            f"{strategy.weak_trend_stop_profit:.2%}",
-            f"{strategy.weak_trend_stop_loss:.2%}",
             f"{strategy.medium_trend_buy_threshold:.2f}",
             f"{strategy.medium_trend_sell_threshold:.2f}",
             f"{strategy.medium_trend_base_ratio:.2%}",
@@ -239,9 +234,12 @@ def save_volatile_strategy_results(results, strategy, save_dir="volatile_strateg
             f"{strategy.strong_trend_stop_profit:.2%}",
             f"{strategy.strong_trend_stop_loss:.2%}",
             f"{strategy.ma_periods}",
-            f"中等:{strategy.medium_trend_support_buy_ratio:.2%}/强:{strategy.strong_trend_support_buy_ratio:.2%}",
-            f"中等:{strategy.medium_trend_resistance_sell_ratio:.2%}/强:{strategy.strong_trend_resistance_sell_ratio:.2%}",
-            ""  # 移除ma_threshold引用
+            f"{strategy.medium_trend_support_buy_ratio:.2%}",
+            f"{strategy.medium_trend_resistance_sell_ratio:.2%}",
+            f"{strategy.strong_trend_support_buy_ratio:.2%}",
+            f"{strategy.strong_trend_resistance_sell_ratio:.2%}",
+            f"{strategy.weekly_drop_threshold:.2%}",
+            f"{strategy.weekly_drop_buy_ratio:.2%}"
         ]
     }
     
@@ -293,7 +291,6 @@ def save_volatile_strategy_results(results, strategy, save_dir="volatile_strateg
 - **ADX计算周期**: {strategy.adx_period}
 - **ADX低阈值**: {strategy.adx_low_threshold}
 - **ADX高阈值**: {strategy.adx_high_threshold}
-- **弱趋势买入阈值**: {strategy.weak_trend_buy_threshold:.2f}
 - **中等趋势买入阈值**: {strategy.medium_trend_buy_threshold:.2f}
 - **强趋势买入阈值**: {strategy.strong_trend_buy_threshold:.2f}
 - **MA周期**: {strategy.ma_periods}

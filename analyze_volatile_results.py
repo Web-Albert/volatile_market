@@ -147,6 +147,32 @@ def analyze_volatile_trading_performance(results: dict):
     print(f"买入次数: {len(buy_trades)}")
     print(f"卖出次数: {len(sell_trades)}")
     
+    # 分析交易约束情况（如果有记录数据）
+    if 'records' in results:
+        records = results['records']
+        if 'today_bought' in records.columns and 'today_added_position' in records.columns:
+            print(f"\n🚫 交易约束分析:")
+            total_points = len(records)
+            bought_blocked = len(records[records['today_bought'] == True])
+            added_blocked = len(records[records['today_added_position'] == True])
+            
+            print(f"当天已买入状态: {bought_blocked}个时间点 ({bought_blocked/total_points*100:.1f}%)")
+            print(f"当天已加仓状态: {added_blocked}个时间点 ({added_blocked/total_points*100:.1f}%)")
+            
+            if 'today_sold' in records.columns:
+                sold_blocked = len(records[records['today_sold'] == True])
+                print(f"当天已卖出状态: {sold_blocked}个时间点 ({sold_blocked/total_points*100:.1f}%)")
+            
+            if 'can_buy_today' in records.columns and 'can_add_position_today' in records.columns:
+                can_buy = len(records[records['can_buy_today'] == True])
+                can_add = len(records[records['can_add_position_today'] == True])
+                print(f"可买入时间点: {can_buy}个时间点 ({can_buy/total_points*100:.1f}%)")
+                print(f"可加仓时间点: {can_add}个时间点 ({can_add/total_points*100:.1f}%)")
+                
+                if 'can_trade_today' in records.columns:
+                    can_trade = len(records[records['can_trade_today'] == True])
+                    print(f"可交易时间点: {can_trade}个时间点 ({can_trade/total_points*100:.1f}%)")
+    
     # 交易金额统计
     if len(buy_trades) > 0:
         print(f"\n💰 买入交易分析:")

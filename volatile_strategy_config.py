@@ -9,8 +9,8 @@ BTC震荡市场交易策略配置文件
 # ==================== 策略参数配置 ====================
 
 # 基础策略参数
-MIN_BTC_RATIO = 0.3         # 最低BTC仓位比例 (30%)
-MAX_BTC_RATIO = 0.8         # 最大BTC仓位比例 (80%)
+MIN_BTC_RATIO = 0         # 最低BTC仓位比例 (30%)
+MAX_BTC_RATIO = 0.9         # 最大BTC仓位比例 (80%)
 INITIAL_CASH = 100000       # 初始资金 (100,000 USDT)
 TRADING_FEE = 0.0005        # 交易手续费 (万分之五)
 
@@ -29,28 +29,28 @@ MEDIUM_TREND_SELL_THRESHOLD = 0.7   # 中等趋势卖出阈值
 
 # 合成信号阈值参数（ADX > 40时 - 强趋势）
 STRONG_TREND_BUY_THRESHOLD = 1.5    # 强趋势买入阈值
-STRONG_TREND_SELL_THRESHOLD = 0.7   # 强趋势卖出阈值
+STRONG_TREND_SELL_THRESHOLD = 0.5   # 强趋势卖出阈值
 
 # 仓位参数
-MEDIUM_TREND_BASE_RATIO = 0.25      # 中等趋势基础仓位比例 (25%)
-STRONG_TREND_BASE_RATIO = 0.15      # 强趋势基础仓位比例 (15%)
+MEDIUM_TREND_BASE_RATIO = 0.3      # 中等趋势基础仓位比例 (25%)
+STRONG_TREND_BASE_RATIO = 0.2      # 强趋势基础仓位比例 (15%)
 
 # 止盈止损参数
-MEDIUM_TREND_STOP_PROFIT = 0.06     # 中等趋势止盈比例 (6%)
-MEDIUM_TREND_STOP_LOSS = 0.03       # 中等趋势止损比例 (3%)
-STRONG_TREND_STOP_PROFIT = 0.04     # 强趋势止盈比例 (4%)
-STRONG_TREND_STOP_LOSS = 0.03       # 强趋势止损比例 (3%)
+MEDIUM_TREND_STOP_PROFIT = 0.08     # 中等趋势止盈比例 (6%)
+MEDIUM_TREND_STOP_LOSS = 0.04       # 中等趋势止损比例 (3%)
+STRONG_TREND_STOP_PROFIT = 0.06     # 强趋势止盈比例 (4%)
+STRONG_TREND_STOP_LOSS = 0.04       # 强趋势止损比例 (3%)
 
 # MA支撑压力位参数
-MA_PERIODS = [30, 60, 120]           # MA周期列表
+MA_PERIODS = [30, 60, 90]           # MA周期列表
 
 # 中等趋势 (20 <= ADX <= 40) MA支撑压力位参数
-MEDIUM_TREND_SUPPORT_BUY_RATIO = 0.15      # 中等趋势支撑位加仓比例 (15%)
-MEDIUM_TREND_RESISTANCE_SELL_RATIO = 0.20  # 中等趋势压力位减仓比例 (20%)
+MEDIUM_TREND_SUPPORT_BUY_RATIO = 0.1      # 中等趋势支撑位加仓比例 (15%)
+MEDIUM_TREND_RESISTANCE_SELL_RATIO = 0.15  # 中等趋势压力位减仓比例 (20%)
 
 # 强趋势 (ADX > 40) MA支撑压力位参数
-STRONG_TREND_SUPPORT_BUY_RATIO = 0.10      # 强趋势支撑位加仓比例 (10%) - 更小
-STRONG_TREND_RESISTANCE_SELL_RATIO = 0.25  # 强趋势压力位减仓比例 (25%) - 更大
+STRONG_TREND_SUPPORT_BUY_RATIO = 0.05      # 强趋势支撑位加仓比例 (10%) - 更小
+STRONG_TREND_RESISTANCE_SELL_RATIO = 0.20  # 强趋势压力位减仓比例 (25%) - 更大
 
 # 周跌幅加仓参数
 WEEKLY_DROP_THRESHOLD = 0.15        # 周跌幅阈值（15%）
@@ -70,8 +70,8 @@ BOLL_PARAMS = {
 
 RSI_PARAMS = {
     'period': 14,
-    'buy_threshold': 30,
-    'sell_threshold': 70
+    'buy_threshold': 20,
+    'sell_threshold': 90
 }
 
 # ==================== 数据文件路径配置 ====================

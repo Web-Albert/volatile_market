@@ -127,6 +127,12 @@ class VolatileMarketStrategy:
         self.market_phase = 'oscillation'  # 当前市场阶段
         self.current_news_signal = 1.0
         
+        # 交易约束状态
+        self.today_bought = False           # 当天是否已买入
+        self.today_added_position = False   # 当天是否已加仓
+        self.today_sold = False             # 当天是否已卖出或减仓
+        self.last_trade_date = None         # 最后交易日期
+        
         # 信号生成器
         self.signal_generator = SignalGenerator()
         
@@ -337,6 +343,25 @@ class VolatileMarketStrategy:
         if self.total_value <= 0:
             return 0
         return self.btc_value / self.total_value
+    
+    def reset_daily_trading_flags(self, current_date):
+        """重置每日交易标志"""
+        if self.last_trade_date is None or self.last_trade_date != current_date:
+            self.today_bought = False
+            self.today_added_position = False
+            self.today_sold = False
+    
+    def can_buy_today(self) -> bool:
+        """检查今天是否可以买入（技术指标买入）"""
+        return not self.today_bought and not self.today_added_position
+    
+    def can_add_position_today(self) -> bool:
+        """检查今天是否可以加仓（支撑位加仓）"""
+        return not self.today_added_position
+    
+    def can_trade_today(self) -> bool:
+        """检查今天是否可以执行任何交易操作（当天卖出后禁止所有操作）"""
+        return not self.today_sold
     
     def determine_market_phase(self, news_signal: float) -> str:
         """确定市场阶段"""
@@ -553,6 +578,14 @@ class VolatileMarketStrategy:
         self.positions.append(position)
         
         print(f"{timestamp}: 买入 {buy_amount:.6f} BTC @ {price:.2f}, 原因: {reason}")
+        
+        # 更新交易约束状态
+        current_date = timestamp.date()
+        if "加仓" in reason or "支撑位" in reason:
+            self.today_added_position = True
+        else:
+            self.today_bought = True
+        self.last_trade_date = current_date
     
     def execute_sell(self, price: float, sell_ratio: float, timestamp: pd.Timestamp, reason: str):
         """执行卖出操作（增加最低仓位比例保护）"""
@@ -645,10 +678,16 @@ class VolatileMarketStrategy:
         
         print(f"{timestamp}: 卖出 {sell_amount:.6f} BTC @ {price:.2f}, 原因: {reason}")
         
+        # 更新交易约束状态
+        current_date = timestamp.date()
+        self.today_sold = True
+        self.last_trade_date = current_date
+        
         # 更新账户状态并检查最终仓位比例
         self.update_account_status(price)
         final_btc_ratio = self.get_btc_ratio()
         print(f"{timestamp}: 卖出后BTC仓位比例: {final_btc_ratio:.2%} (最低限制: {self.min_btc_ratio:.2%})")
+        print(f"{timestamp}: 当天已卖出，今日不再执行任何交易操作")
     
     def check_stop_conditions(self, current_price: float, timestamp: pd.Timestamp, adx_level: str) -> bool:
         """检查止盈止损条件"""
@@ -700,6 +739,7 @@ class VolatileMarketStrategy:
             
         Returns:
             Tuple[float, float]: (支撑位, 压力位)
+            注意：当MA数据不足时，返回None表示无效
         """
         current_price = row['close']
         ma_values = []
@@ -709,8 +749,9 @@ class VolatileMarketStrategy:
             if not pd.isna(ma_value):
                 ma_values.append(ma_value)
         
+        # 如果没有有效的MA数据，返回None（表示无法使用MA策略）
         if len(ma_values) == 0:
-            return current_price, current_price
+            return None, None
         
         # 找到支撑位和压力位
         support_candidates = [ma for ma in ma_values if ma < current_price]  # 价格下方的MA
@@ -812,6 +853,10 @@ class VolatileMarketStrategy:
             tech_signal = row['tech_signal']
             adx_value = row['adx']
             news_signal = row['news_signal']
+            current_date = timestamp.date()
+            
+            # 重置每日交易标志
+            self.reset_daily_trading_flags(current_date)
             
             # 更新账户状态
             self.update_account_status(current_price)
@@ -841,14 +886,22 @@ class VolatileMarketStrategy:
             # 检查周跌幅加仓条件（在任何ADX阶段都适用）
             weekly_drop_triggered = self.check_weekly_drop(current_price, timestamp, data)
             if weekly_drop_triggered:
-                self.execute_buy(current_price, self.weekly_drop_buy_ratio, timestamp, f"周跌幅加仓({adx_level})")
+                # 检查是否可以加仓（当天未加仓）
+                if self.can_add_position_today():
+                    self.execute_buy(current_price, self.weekly_drop_buy_ratio, timestamp, f"周跌幅加仓({adx_level})")
+                else:
+                    print(f"{timestamp}: 周跌幅加仓被阻止 - 当天已加仓")
             
             # 只在震荡阶段执行交易策略
             if self.market_phase == 'oscillation':
                 phase_stats['trading_points'] += 1
                 
+                # 检查当天是否已卖出（如果已卖出则不再执行任何操作）
+                if not self.can_trade_today():
+                    # 当天已卖出，跳过所有交易逻辑
+                    pass
                 # 只有在ADX >= 20时才执行交易（ADX < 20时不操作）
-                if adx_value >= self.adx_low_threshold:
+                elif adx_value >= self.adx_low_threshold:
                     # 获取当前ADX等级下的交易参数
                     if adx_level in ['medium', 'strong']:
                         ratios = self.get_adx_based_ratios(adx_level)
@@ -873,48 +926,101 @@ class VolatileMarketStrategy:
                         
                         # 2. 检查合成信号
                         if tech_signal >= ratios['buy_threshold']:
-                            # 合成信号买入
-                            self.execute_buy(current_price, ratios['base_buy_ratio'], timestamp, f"合成信号买入({adx_level})")
+                            # 检查是否可以买入（当天未买入且未加仓）
+                            if self.can_buy_today():
+                                # 检查是否同时突破压力位（信号冲突检查）
+                                support_level, resistance_level = self.get_ma_support_resistance_levels_new(row)
+                                
+                                # 如果MA数据不足，直接执行买入
+                                if support_level is None or resistance_level is None:
+                                    self.execute_buy(current_price, ratios['base_buy_ratio'], timestamp, f"合成信号买入({adx_level})")
+                                elif prev_row is not None:
+                                    break_support_down, break_resistance_up = self.check_ma_breakthrough_new(
+                                        current_high, current_low,
+                                        prev_row['high'], prev_row['low'],
+                                        support_level, resistance_level
+                                    )
+                                    
+                                    if break_resistance_up:
+                                        print(f"{timestamp}: 技术指标买入信号被阻止 - 同时突破压力位向上（信号冲突）")
+                                    else:
+                                        # 合成信号买入
+                                        self.execute_buy(current_price, ratios['base_buy_ratio'], timestamp, f"合成信号买入({adx_level})")
+                                else:
+                                    # 没有前一行数据时直接买入
+                                    self.execute_buy(current_price, ratios['base_buy_ratio'], timestamp, f"合成信号买入({adx_level})")
+                            else:
+                                print(f"{timestamp}: 技术指标买入信号被阻止 - 当天已买入或加仓")
                         
                         elif tech_signal <= ratios['sell_threshold'] and self.btc_amount > 0:
-                            # 合成信号卖出所有持仓
-                            self.execute_sell(current_price, 1.0, timestamp, f"合成信号卖出({adx_level})")
+                            # 检查是否同时跌破支撑位（信号冲突检查）
+                            support_level, resistance_level = self.get_ma_support_resistance_levels_new(row)
+                            
+                            # 如果MA数据不足，直接执行卖出
+                            if support_level is None or resistance_level is None:
+                                self.execute_sell(current_price, 1.0, timestamp, f"合成信号卖出({adx_level})")
+                            elif prev_row is not None:
+                                break_support_down, break_resistance_up = self.check_ma_breakthrough_new(
+                                    current_high, current_low,
+                                    prev_row['high'], prev_row['low'],
+                                    support_level, resistance_level
+                                )
+                                
+                                if break_support_down:
+                                    print(f"{timestamp}: 技术指标卖出信号被阻止 - 同时跌破支撑位向下（信号冲突）")
+                                else:
+                                    # 合成信号卖出所有持仓
+                                    self.execute_sell(current_price, 1.0, timestamp, f"合成信号卖出({adx_level})")
+                            else:
+                                # 没有前一行数据时直接卖出
+                                self.execute_sell(current_price, 1.0, timestamp, f"合成信号卖出({adx_level})")
                         
-                        # 3. MA支撑压力位逻辑（只有在有持仓且有前一期数据时才执行）
+                        # 3. MA支撑压力位逻辑（只有在有持仓且有前一期数据且MA数据有效时才执行）
                         if self.btc_amount > 0 and prev_row is not None:
                             # 获取支撑压力位
                             support_level, resistance_level = self.get_ma_support_resistance_levels_new(row)
                             prev_support_level, prev_resistance_level = self.get_ma_support_resistance_levels_new(prev_row)
                             
-                            # 检查MA突破
-                            break_support_down, break_resistance_up = self.check_ma_breakthrough_new(
-                                current_high, current_low,
-                                prev_row['high'], prev_row['low'],
-                                support_level, resistance_level
-                            )
-                            
-                            if break_support_down:
-                                # 突破支撑位向下，下一期开盘价加仓
-                                pending_trades.append({
-                                    'action': 'buy',
-                                    'ratio': ratios['support_add_ratio'],
-                                    'reason': f"突破支撑位加仓({adx_level})"
-                                })
-                            
-                            elif break_resistance_up:
-                                # 突破压力位向上，下一期开盘价减仓
-                                current_ratio = self.get_btc_ratio()
-                                reduce_ratio = min(ratios['resistance_reduce_ratio'], current_ratio)
-                                if reduce_ratio > 0:
-                                    pending_trades.append({
-                                        'action': 'sell',
-                                        'ratio': reduce_ratio,
-                                        'reason': f"突破压力位减仓({adx_level})"
-                                    })
+                            # 只有当前和前一期的MA数据都有效时才执行MA策略
+                            if (support_level is not None and resistance_level is not None and
+                                prev_support_level is not None and prev_resistance_level is not None):
+                                
+                                # 检查MA突破
+                                break_support_down, break_resistance_up = self.check_ma_breakthrough_new(
+                                    current_high, current_low,
+                                    prev_row['high'], prev_row['low'],
+                                    support_level, resistance_level
+                                )
+                                
+                                if break_support_down:
+                                    # 检查是否可以加仓（当天未加仓）
+                                    if self.can_add_position_today():
+                                        # 突破支撑位向下，下一期开盘价加仓
+                                        pending_trades.append({
+                                            'action': 'buy',
+                                            'ratio': ratios['support_add_ratio'],
+                                            'reason': f"突破支撑位加仓({adx_level})"
+                                        })
+                                    else:
+                                        print(f"{timestamp}: 支撑位加仓被阻止 - 当天已加仓")
+                                
+                                elif break_resistance_up:
+                                    # 突破压力位向上，下一期开盘价减仓
+                                    current_ratio = self.get_btc_ratio()
+                                    reduce_ratio = min(ratios['resistance_reduce_ratio'], current_ratio)
+                                    if reduce_ratio > 0:
+                                        pending_trades.append({
+                                            'action': 'sell',
+                                            'ratio': reduce_ratio,
+                                            'reason': f"突破压力位减仓({adx_level})"
+                                        })
+                            else:
+                                # MA数据不足时，跳过MA支撑压力位策略
+                                pass
                     
             else:
                 # 在看多或看空阶段，不执行震荡策略，但可以检查止盈止损
-                if self.btc_amount > 0:
+                if self.btc_amount > 0 and self.can_trade_today():
                     # 在非震荡阶段使用中等趋势的止盈止损参数
                     medium_ratios = self.get_adx_based_ratios('medium')
                     
@@ -954,10 +1060,16 @@ class VolatileMarketStrategy:
                 'news_signal': news_signal,
                 'market_phase': self.market_phase,
                 'positions_count': len(self.positions),
-                'support_level': support_level,
-                'resistance_level': resistance_level,
+                'support_level': support_level if support_level is not None else np.nan,
+                'resistance_level': resistance_level if resistance_level is not None else np.nan,
                 'weekly_drop_triggered': weekly_drop_triggered,
-                'pending_trades_count': len(pending_trades)
+                'pending_trades_count': len(pending_trades),
+                'today_bought': self.today_bought,
+                'today_added_position': self.today_added_position,
+                'today_sold': self.today_sold,
+                'can_buy_today': self.can_buy_today(),
+                'can_add_position_today': self.can_add_position_today(),
+                'can_trade_today': self.can_trade_today()
             }
             self.records.append(record)
         
