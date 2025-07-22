@@ -26,6 +26,7 @@ def load_data():
     print("加载日线K线数据...")
     daily_klines = pd.read_csv(paths['daily_klines'], index_col='open_time', parse_dates=['open_time'],
                                usecols=['open_time','open','high','low','close','volume'])
+    #daily_klines = daily_klines.loc['2025-01-01':]
     
     # 加载15分钟数据
     print("加载15分钟K线数据...")
@@ -33,11 +34,13 @@ def load_data():
         min15_klines = pickle.load(f)
     min15_klines = min15_klines[['time','open','high','low','close','volume']] 
     min15_klines = min15_klines.set_index('time')
+    #min15_klines = min15_klines.loc['2025-01-01':]
     
     # 加载新闻信号数据
     print("加载新闻信号数据...")
     news_signals = pd.read_csv(paths['news_signals'], index_col='time', parse_dates=['time'],
                                usecols=['time','important_news_signal'])
+    #news_signals = news_signals.loc['2025-01-01':]
     
     print(f"数据加载完成:")
     print(f"  日线数据: {len(daily_klines)} 条")
@@ -209,9 +212,14 @@ def save_volatile_strategy_results(results, strategy, save_dir="volatile_strateg
             '中等趋势止盈比例', '中等趋势止损比例',
             '强趋势买入阈值', '强趋势卖出阈值', '强趋势基础仓位比例',
             '强趋势止盈比例', '强趋势止损比例',
-            'MA周期', '中等趋势支撑位加仓比例', '中等趋势压力位减仓比例',
-            '强趋势支撑位加仓比例', '强趋势压力位减仓比例',
-            '周跌幅阈值', '周跌幅加仓比例'
+            '弱趋势卖出阈值',
+            '弱趋势减仓比例',
+            '肯特纳中线周期', '肯特纳ATR周期', '肯特纳ATR倍数',
+            '中等趋势上穿上线减仓比例', '中等趋势上穿中线减仓比例',
+            '中等趋势下穿下线加仓比例', '中等趋势下穿中线加仓比例',
+            '强趋势上穿上线减仓比例', '强趋势上穿中线减仓比例',
+            '强趋势下穿下线加仓比例', '强趋势下穿中线加仓比例',
+            '周跌幅阈值', '周跌幅加仓比例', '周跌幅加仓冷却期'
         ],
         '参数值': [
             f"{strategy.min_btc_ratio:.2%}",
@@ -233,13 +241,22 @@ def save_volatile_strategy_results(results, strategy, save_dir="volatile_strateg
             f"{strategy.strong_trend_base_ratio:.2%}",
             f"{strategy.strong_trend_stop_profit:.2%}",
             f"{strategy.strong_trend_stop_loss:.2%}",
-            f"{strategy.ma_periods}",
-            f"{strategy.medium_trend_support_buy_ratio:.2%}",
-            f"{strategy.medium_trend_resistance_sell_ratio:.2%}",
-            f"{strategy.strong_trend_support_buy_ratio:.2%}",
-            f"{strategy.strong_trend_resistance_sell_ratio:.2%}",
+            f"{strategy.weak_trend_sell_threshold:.2f}",
+            f"{strategy.weak_trend_sell_ratio:.2%}",
+            f"{strategy.keltner_period}天",
+            f"{strategy.keltner_atr_period}天",
+            f"{strategy.keltner_multiplier}倍",
+            f"{strategy.medium_trend_upper_sell_ratio:.2%}",
+            f"{strategy.medium_trend_middle_sell_ratio:.2%}",
+            f"{strategy.medium_trend_lower_buy_ratio:.2%}",
+            f"{strategy.medium_trend_middle_buy_ratio:.2%}",
+            f"{strategy.strong_trend_upper_sell_ratio:.2%}",
+            f"{strategy.strong_trend_middle_sell_ratio:.2%}",
+            f"{strategy.strong_trend_lower_buy_ratio:.2%}",
+            f"{strategy.strong_trend_middle_buy_ratio:.2%}",
             f"{strategy.weekly_drop_threshold:.2%}",
-            f"{strategy.weekly_drop_buy_ratio:.2%}"
+            f"{strategy.weekly_drop_buy_ratio:.2%}",
+            f"{strategy.weekly_drop_cooldown_days}天"
         ]
     }
     
@@ -293,11 +310,22 @@ def save_volatile_strategy_results(results, strategy, save_dir="volatile_strateg
 - **ADX高阈值**: {strategy.adx_high_threshold}
 - **中等趋势买入阈值**: {strategy.medium_trend_buy_threshold:.2f}
 - **强趋势买入阈值**: {strategy.strong_trend_buy_threshold:.2f}
-- **MA周期**: {strategy.ma_periods}
-- **中等趋势支撑位加仓比例**: {strategy.medium_trend_support_buy_ratio:.2%}
-- **中等趋势压力位减仓比例**: {strategy.medium_trend_resistance_sell_ratio:.2%}
-- **强趋势支撑位加仓比例**: {strategy.strong_trend_support_buy_ratio:.2%}
-- **强趋势压力位减仓比例**: {strategy.strong_trend_resistance_sell_ratio:.2%}
+- **弱趋势卖出阈值**: {strategy.weak_trend_sell_threshold:.2f}
+- **弱趋势减仓比例**: {strategy.weak_trend_sell_ratio:.2%}
+- **肯特纳中线周期**: {strategy.keltner_period}天EMA
+- **肯特纳ATR周期**: {strategy.keltner_atr_period}天
+- **肯特纳ATR倍数**: {strategy.keltner_multiplier}倍
+- **中等趋势上穿上线减仓比例**: {strategy.medium_trend_upper_sell_ratio:.2%}
+- **中等趋势上穿中线减仓比例**: {strategy.medium_trend_middle_sell_ratio:.2%}
+- **中等趋势下穿下线加仓比例**: {strategy.medium_trend_lower_buy_ratio:.2%}
+- **中等趋势下穿中线加仓比例**: {strategy.medium_trend_middle_buy_ratio:.2%}
+- **强趋势上穿上线减仓比例**: {strategy.strong_trend_upper_sell_ratio:.2%}
+- **强趋势上穿中线减仓比例**: {strategy.strong_trend_middle_sell_ratio:.2%}
+- **强趋势下穿下线加仓比例**: {strategy.strong_trend_lower_buy_ratio:.2%}
+- **强趋势下穿中线加仓比例**: {strategy.strong_trend_middle_buy_ratio:.2%}
+- **周跌幅阈值**: {strategy.weekly_drop_threshold:.2%}
+- **周跌幅加仓比例**: {strategy.weekly_drop_buy_ratio:.2%}
+- **周跌幅加仓冷却期**: {strategy.weekly_drop_cooldown_days}天
 
 ## 📅 回测时间
 - **开始时间**: {records_data['timestamp'].min()}

@@ -40,6 +40,10 @@ class VolatileMarketStrategy:
                  strong_trend_buy_threshold: float = 1.6,   # 强趋势买入阈值
                  strong_trend_sell_threshold: float = 0.4,  # 强趋势卖出阈值
                  
+                 # 合成信号阈值参数（ADX < 20时）
+                 weak_trend_sell_threshold: float = 0.6,    # 弱趋势卖出阈值（只卖出，不买入）
+                 weak_trend_sell_ratio: float = 0.3,        # 弱趋势减仓比例
+                 
                  # 仓位参数
                  medium_trend_base_ratio: float = 0.25,     # 中等趋势基础仓位比例
                  strong_trend_base_ratio: float = 0.15,     # 强趋势基础仓位比例
@@ -50,20 +54,27 @@ class VolatileMarketStrategy:
                  strong_trend_stop_profit: float = 0.04,    # 强趋势止盈比例
                  strong_trend_stop_loss: float = 0.03,      # 强趋势止损比例
                  
-                 # MA支撑压力位参数
-                 ma_periods: List[int] = [30, 120],         # MA周期列表
+                 # 肯特纳通道参数
+                 keltner_period: int = 50,                  # 肯特纳通道中线周期（50天）
+                 keltner_atr_period: int = 50,              # ATR计算周期（50天）
+                 keltner_multiplier: float = 3.75,          # ATR倍数（3.75倍）
                  
-                 # 中等趋势MA支撑压力位参数
-                 medium_trend_support_buy_ratio: float = 0.15,     # 中等趋势支撑位加仓比例
-                 medium_trend_resistance_sell_ratio: float = 0.20, # 中等趋势压力位减仓比例
+                 # 中等趋势肯特纳通道交易参数
+                 medium_trend_upper_sell_ratio: float = 0.20,      # 中等趋势上穿上线减仓比例
+                 medium_trend_middle_sell_ratio: float = 0.15,     # 中等趋势上穿中线减仓比例
+                 medium_trend_lower_buy_ratio: float = 0.15,       # 中等趋势下穿下线加仓比例
+                 medium_trend_middle_buy_ratio: float = 0.10,      # 中等趋势下穿中线加仓比例
                  
-                 # 强趋势MA支撑压力位参数
-                 strong_trend_support_buy_ratio: float = 0.10,     # 强趋势支撑位加仓比例
-                 strong_trend_resistance_sell_ratio: float = 0.25, # 强趋势压力位减仓比例
+                 # 强趋势肯特纳通道交易参数
+                 strong_trend_upper_sell_ratio: float = 0.25,      # 强趋势上穿上线减仓比例
+                 strong_trend_middle_sell_ratio: float = 0.20,     # 强趋势上穿中线减仓比例
+                 strong_trend_lower_buy_ratio: float = 0.10,       # 强趋势下穿下线加仓比例
+                 strong_trend_middle_buy_ratio: float = 0.08,      # 强趋势下穿中线加仓比例
                  
                  # 周跌幅加仓参数
                  weekly_drop_threshold: float = 0.15,       # 周跌幅阈值（15%）
                  weekly_drop_buy_ratio: float = 0.1,        # 周跌幅加仓比例
+                 weekly_drop_cooldown_days: int = 7,        # 周跌幅加仓冷却期（天数）
                  
                  # 信号生成器参数
                  macd_params: Dict = None,
@@ -90,6 +101,8 @@ class VolatileMarketStrategy:
         self.medium_trend_sell_threshold = medium_trend_sell_threshold
         self.strong_trend_buy_threshold = strong_trend_buy_threshold
         self.strong_trend_sell_threshold = strong_trend_sell_threshold
+        self.weak_trend_sell_threshold = weak_trend_sell_threshold
+        self.weak_trend_sell_ratio = weak_trend_sell_ratio
         
         # 仓位参数
         self.medium_trend_base_ratio = medium_trend_base_ratio
@@ -101,16 +114,23 @@ class VolatileMarketStrategy:
         self.strong_trend_stop_profit = strong_trend_stop_profit
         self.strong_trend_stop_loss = strong_trend_stop_loss
         
-        # MA支撑压力位参数
-        self.ma_periods = ma_periods
-        self.medium_trend_support_buy_ratio = medium_trend_support_buy_ratio
-        self.medium_trend_resistance_sell_ratio = medium_trend_resistance_sell_ratio
-        self.strong_trend_support_buy_ratio = strong_trend_support_buy_ratio
-        self.strong_trend_resistance_sell_ratio = strong_trend_resistance_sell_ratio
+        # 肯特纳通道参数
+        self.keltner_period = keltner_period
+        self.keltner_atr_period = keltner_atr_period
+        self.keltner_multiplier = keltner_multiplier
+        self.medium_trend_upper_sell_ratio = medium_trend_upper_sell_ratio
+        self.medium_trend_middle_sell_ratio = medium_trend_middle_sell_ratio
+        self.medium_trend_lower_buy_ratio = medium_trend_lower_buy_ratio
+        self.medium_trend_middle_buy_ratio = medium_trend_middle_buy_ratio
+        self.strong_trend_upper_sell_ratio = strong_trend_upper_sell_ratio
+        self.strong_trend_middle_sell_ratio = strong_trend_middle_sell_ratio
+        self.strong_trend_lower_buy_ratio = strong_trend_lower_buy_ratio
+        self.strong_trend_middle_buy_ratio = strong_trend_middle_buy_ratio
         
         # 周跌幅加仓参数
         self.weekly_drop_threshold = weekly_drop_threshold
         self.weekly_drop_buy_ratio = weekly_drop_buy_ratio
+        self.weekly_drop_cooldown_days = weekly_drop_cooldown_days
         
         # 账户状态
         self.cash = initial_cash
@@ -132,6 +152,9 @@ class VolatileMarketStrategy:
         self.today_added_position = False   # 当天是否已加仓
         self.today_sold = False             # 当天是否已卖出或减仓
         self.last_trade_date = None         # 最后交易日期
+        
+        # 周跌幅加仓状态跟踪
+        self.last_weekly_drop_buy_date = None  # 最后一次周跌幅加仓日期
         
         # 信号生成器
         self.signal_generator = SignalGenerator()
@@ -174,7 +197,9 @@ class VolatileMarketStrategy:
         
         tech_signals = []
         adx_values = []
-        ma_values = {period: [] for period in self.ma_periods}
+        keltner_upper = []
+        keltner_middle = []
+        keltner_lower = []
         
         # 技术指标所需的最大回看期数
         max_lookback = max(
@@ -182,7 +207,8 @@ class VolatileMarketStrategy:
             self.signal_generator.boll_params['period'],
             self.signal_generator.rsi_params['period'],
             self.adx_period,
-            max(self.ma_periods)
+            self.keltner_period,
+            self.keltner_atr_period
         ) + 10  # 额外缓冲期
         
         print(f"正在计算 {len(min15_klines)} 个15分钟K线的技术指标信号...")
@@ -238,20 +264,43 @@ class VolatileMarketStrategy:
                 else:
                     adx_value = 25.0
                 
-                # 计算各个MA
-                for period in self.ma_periods:
-                    if len(historical_daily) >= period:
-                        ma = talib.SMA(historical_daily['close'].values, timeperiod=period)
-                        ma_value = ma[-1] if not np.isnan(ma[-1]) else current_close
+                # 计算肯特纳通道
+                if len(historical_daily) >= max(self.keltner_period, self.keltner_atr_period):
+                    # 计算中线（EMA）
+                    middle_line = talib.EMA(historical_daily['close'].values, timeperiod=self.keltner_period)
+                    
+                    # 计算ATR
+                    atr = talib.ATR(
+                        historical_daily['high'].values,
+                        historical_daily['low'].values,
+                        historical_daily['close'].values,
+                        timeperiod=self.keltner_atr_period
+                    )
+                    
+                    # 计算上下线
+                    if not np.isnan(middle_line[-1]) and not np.isnan(atr[-1]):
+                        keltner_mid = middle_line[-1]
+                        keltner_up = keltner_mid + (atr[-1] * self.keltner_multiplier)
+                        keltner_low = keltner_mid - (atr[-1] * self.keltner_multiplier)
                     else:
-                        ma_value = current_close
-                    ma_values[period].append(ma_value)
+                        keltner_mid = current_close
+                        keltner_up = current_close * 1.05  # 默认上浮5%
+                        keltner_low = current_close * 0.95  # 默认下浮5%
+                else:
+                    keltner_mid = current_close
+                    keltner_up = current_close * 1.05
+                    keltner_low = current_close * 0.95
+                
+                keltner_upper.append(keltner_up)
+                keltner_middle.append(keltner_mid)
+                keltner_lower.append(keltner_low)
                 
             else:
                 tech_signal = 1.00
                 adx_value = 25.0
-                for period in self.ma_periods:
-                    ma_values[period].append(current_close)
+                keltner_upper.append(current_close * 1.05)
+                keltner_middle.append(current_close)
+                keltner_lower.append(current_close * 0.95)
             
             tech_signals.append(tech_signal)
             adx_values.append(adx_value)
@@ -259,10 +308,9 @@ class VolatileMarketStrategy:
         # 将计算结果添加到15分钟数据
         min15_klines['tech_signal'] = tech_signals
         min15_klines['adx'] = adx_values
-
-        
-        for period in self.ma_periods:
-            min15_klines[f'ma_{period}'] = ma_values[period]
+        min15_klines['keltner_upper'] = keltner_upper
+        min15_klines['keltner_middle'] = keltner_middle
+        min15_klines['keltner_lower'] = keltner_lower
         
         print("技术指标信号计算完成")
         
@@ -384,7 +432,7 @@ class VolatileMarketStrategy:
     def get_trading_thresholds(self, adx_level: str) -> Tuple[float, float]:
         """根据ADX等级获取买卖阈值"""
         if adx_level == 'weak':
-            return 1.3, 0.7 # 弱趋势阈值
+            return 999.0, self.weak_trend_sell_threshold  # 弱趋势只卖出，不买入
         elif adx_level == 'medium':
             return self.medium_trend_buy_threshold, self.medium_trend_sell_threshold
         else:  # strong
@@ -408,53 +456,11 @@ class VolatileMarketStrategy:
         else:  # strong
             return self.strong_trend_stop_profit, self.strong_trend_stop_loss
     
-    def check_ma_support_resistance(self, current_price: float, current_high: float, current_low: float, 
-                                   row: pd.Series, prev_row: pd.Series = None) -> Tuple[bool, bool]:
-        """
-        检查是否触及MA支撑位或压力位
-        支撑位：K线从上向下穿过MA线（最低价穿过）
-        压力位：K线从下向上穿过MA线（最高价穿过）
-        
-        Args:
-            current_price: 当前收盘价
-            current_high: 当前最高价
-            current_low: 当前最低价
-            row: 当前时间点的数据
-            prev_row: 前一个时间点的数据
-            
-        Returns:
-            Tuple[bool, bool]: (是否触及支撑位, 是否触及压力位)
-        """
-        is_support = False
-        is_resistance = False
-        
-        # 如果没有前一个时间点的数据，无法判断穿越
-        if prev_row is None:
-            return is_support, is_resistance
-        
-        prev_high = prev_row['high']
-        prev_low = prev_row['low']
-        
-        for period in self.ma_periods:
-            ma_value = row[f'ma_{period}']
-            prev_ma_value = prev_row[f'ma_{period}']
-            
-            if pd.isna(ma_value) or pd.isna(prev_ma_value):
-                continue
-            
-            # 支撑位判断：前一K线在MA上方，当前K线最低价穿过MA
-            if prev_low > prev_ma_value and current_low <= ma_value:
-                is_support = True
-            
-            # 压力位判断：前一K线在MA下方，当前K线最高价穿过MA
-            if prev_high < prev_ma_value and current_high >= ma_value:
-                is_resistance = True
-        
-        return is_support, is_resistance
+
     
     def check_weekly_drop(self, current_price: float, timestamp: pd.Timestamp, data: pd.DataFrame) -> bool:
         """
-        检查是否出现周跌幅超过阈值的情况
+        检查是否出现周跌幅超过阈值的情况，并考虑冷却期
         
         Args:
             current_price: 当前价格
@@ -464,6 +470,12 @@ class VolatileMarketStrategy:
         Returns:
             bool: 是否触发周跌幅加仓条件
         """
+        # 检查冷却期：如果距离上次周跌幅加仓不足冷却期，则不触发
+        if self.last_weekly_drop_buy_date is not None:
+            days_since_last_buy = (timestamp.date() - self.last_weekly_drop_buy_date).days
+            if days_since_last_buy < self.weekly_drop_cooldown_days:
+                return False
+        
         # 获取一周前的时间点
         week_ago = timestamp - timedelta(days=7)
         
@@ -479,46 +491,7 @@ class VolatileMarketStrategy:
         
         return drop_ratio >= self.weekly_drop_threshold
     
-    def get_ma_support_resistance_levels(self, row: pd.Series, current_price: float) -> Tuple[float, float]:
-        """
-        获取当前的支撑位和压力位
-        
-        Args:
-            row: 当前数据行
-            current_price: 当前价格
-            
-        Returns:
-            Tuple[float, float]: (支撑位, 压力位)
-        """
-        ma_values = []
-        for period in self.ma_periods:
-            ma_value = row[f'ma_{period}']
-            if not pd.isna(ma_value):
-                ma_values.append(ma_value)
-        
-        if len(ma_values) == 0:
-            return current_price, current_price
-        
-        ma_values.sort()
-        
-        # 找到支撑位和压力位
-        support_level = None
-        resistance_level = None
-        
-        for ma_value in ma_values:
-            if ma_value < current_price:
-                support_level = ma_value  # 价格下方最近的MA作为支撑位
-            elif ma_value > current_price and resistance_level is None:
-                resistance_level = ma_value  # 价格上方最近的MA作为压力位
-                break
-        
-        # 如果没有找到支撑位或压力位，使用边界值
-        if support_level is None:
-            support_level = min(ma_values) if ma_values else current_price
-        if resistance_level is None:
-            resistance_level = max(ma_values) if ma_values else current_price
-        
-        return support_level, resistance_level
+
     
     def execute_buy(self, price: float, buy_ratio: float, timestamp: pd.Timestamp, reason: str):
         """执行买入操作"""
@@ -728,67 +701,108 @@ class VolatileMarketStrategy:
         
         return traded
     
-    def get_ma_support_resistance_levels_new(self, row: pd.Series) -> Tuple[float, float]:
+    def get_keltner_support_resistance_levels(self, row: pd.Series) -> Tuple[float, float, float]:
         """
-        重新设计的MA支撑压力位获取方法
-        压力位：价格上方最近的MA
-        支撑位：价格下方最近的MA
+        获取肯特纳通道的支撑压力位
         
         Args:
             row: 当前数据行
             
         Returns:
-            Tuple[float, float]: (支撑位, 压力位)
-            注意：当MA数据不足时，返回None表示无效
+            Tuple[float, float, float]: (下线, 中线, 上线)
+            注意：当肯特纳数据不足时，返回None表示无效
         """
-        current_price = row['close']
-        ma_values = []
+        keltner_upper = row['keltner_upper']
+        keltner_middle = row['keltner_middle'] 
+        keltner_lower = row['keltner_lower']
         
-        for period in self.ma_periods:
-            ma_value = row[f'ma_{period}']
-            if not pd.isna(ma_value):
-                ma_values.append(ma_value)
+        # 如果没有有效的肯特纳数据，返回None
+        if pd.isna(keltner_upper) or pd.isna(keltner_middle) or pd.isna(keltner_lower):
+            return None, None, None
         
-        # 如果没有有效的MA数据，返回None（表示无法使用MA策略）
-        if len(ma_values) == 0:
-            return None, None
-        
-        # 找到支撑位和压力位
-        support_candidates = [ma for ma in ma_values if ma < current_price]  # 价格下方的MA
-        resistance_candidates = [ma for ma in ma_values if ma > current_price]  # 价格上方的MA
-        
-        # 支撑位：价格下方最近的MA（最高的）
-        support_level = max(support_candidates) if support_candidates else min(ma_values)
-        
-        # 压力位：价格上方最近的MA（最低的）
-        resistance_level = min(resistance_candidates) if resistance_candidates else max(ma_values)
-        
-        return support_level, resistance_level
+        return keltner_lower, keltner_middle, keltner_upper
     
-    def check_ma_breakthrough_new(self, current_high: float, current_low: float, 
-                                 prev_high: float, prev_low: float,
-                                 support_level: float, resistance_level: float) -> Tuple[bool, bool]:
+    def determine_keltner_position(self, current_price: float, keltner_lower: float, 
+                                  keltner_middle: float, keltner_upper: float) -> str:
         """
-        检查MA突破情况（新逻辑）
+        判断当前价格在肯特纳通道中的位置
         
         Args:
-            current_high: 当前最高价
-            current_low: 当前最低价
-            prev_high: 前一期最高价
-            prev_low: 前一期最低价
-            support_level: 支撑位
-            resistance_level: 压力位
+            current_price: 当前价格
+            keltner_lower: 下线
+            keltner_middle: 中线
+            keltner_upper: 上线
             
         Returns:
-            Tuple[bool, bool]: (突破支撑位向下, 突破压力位向上)
+            str: 'upper' (上线和中线之间), 'lower' (下线和中线之间), 'above' (上线之上), 'below' (下线之下)
         """
-        # 突破支撑位向下：前一期最低价在支撑位上方，当前最低价穿过支撑位
-        break_support_down = prev_low > support_level and current_low <= support_level
+        if current_price > keltner_upper:
+            return 'above'
+        elif current_price < keltner_lower:
+            return 'below'
+        elif current_price > keltner_middle:
+            return 'upper'  # 在中线和上线之间
+        else:
+            return 'lower'  # 在中线和下线之间
+    
+    def check_keltner_breakthrough(self, data: pd.DataFrame, current_timestamp: pd.Timestamp, 
+                                   lookback_days: int = 7) -> Tuple[str, str]:
+        """
+        检查肯特纳通道突破情况
         
-        # 突破压力位向上：前一期最高价在压力位下方，当前最高价穿过压力位
-        break_resistance_up = prev_high < resistance_level and current_high >= resistance_level
+        Args:
+            data: 完整的数据DataFrame
+            current_timestamp: 当前时间戳
+            lookback_days: 回看天数（默认7天）
+            
+        Returns:
+            Tuple[str, str]: (突破类型, 突破方向)
+            突破类型: 'upper', 'middle', 'lower', 'none'
+            突破方向: 'up', 'down', 'none'
+        """
+        # 计算7天前的时间戳
+        week_ago = current_timestamp - timedelta(days=lookback_days)
         
-        return break_support_down, break_resistance_up
+        # 获取当前数据
+        current_row = data.loc[current_timestamp]
+        
+        # 获取过去一周的历史数据
+        historical_data = data[(data.index >= week_ago) & (data.index < current_timestamp)]
+        
+        # 如果历史数据不足，返回无突破
+        if len(historical_data) < lookback_days * 24:  # 至少需要一定数量的数据点
+            return 'none', 'none'
+        
+        current_high = current_row['high']
+        current_low = current_row['low']
+        current_upper = current_row['keltner_upper']
+        current_middle = current_row['keltner_middle']
+        current_lower = current_row['keltner_lower']
+        
+        # 检查过去一周是否都在某个水平之下/之上
+        historical_highs = historical_data['high']
+        historical_lows = historical_data['low']
+        historical_uppers = historical_data['keltner_upper']
+        historical_middles = historical_data['keltner_middle']
+        historical_lowers = historical_data['keltner_lower']
+        
+        # 上穿上线：过去一周最高价都不超过上线，当前最高价突破上线
+        if len(historical_highs) > 0 and (historical_highs <= historical_uppers).all() and current_high > current_upper:
+            return 'upper', 'up'
+        
+        # 上穿中线：过去一周最高价都不超过中线，当前最高价突破中线
+        elif len(historical_highs) > 0 and (historical_highs <= historical_middles).all() and current_high > current_middle:
+            return 'middle', 'up'
+        
+        # 下穿下线：过去一周最低价都不低于下线，当前最低价跌破下线
+        elif len(historical_lows) > 0 and (historical_lows >= historical_lowers).all() and current_low < current_lower:
+            return 'lower', 'down'
+        
+        # 下穿中线：过去一周最低价都不低于中线，当前最低价跌破中线
+        elif len(historical_lows) > 0 and (historical_lows >= historical_middles).all() and current_low < current_middle:
+            return 'middle', 'down'
+        
+        return 'none', 'none'
     
     def get_adx_based_ratios(self, adx_level: str) -> Dict[str, float]:
         """
@@ -803,22 +817,38 @@ class VolatileMarketStrategy:
         if adx_level == 'medium':
             return {
                 'base_buy_ratio': self.medium_trend_base_ratio,
-                'support_add_ratio': self.medium_trend_support_buy_ratio,  # 支撑位加仓比例
-                'resistance_reduce_ratio': self.medium_trend_resistance_sell_ratio,  # 压力位减仓比例
+                'upper_sell_ratio': self.medium_trend_upper_sell_ratio,      # 上穿上线减仓比例
+                'middle_sell_ratio': self.medium_trend_middle_sell_ratio,    # 上穿中线减仓比例
+                'lower_buy_ratio': self.medium_trend_lower_buy_ratio,        # 下穿下线加仓比例
+                'middle_buy_ratio': self.medium_trend_middle_buy_ratio,      # 下穿中线加仓比例
                 'buy_threshold': self.medium_trend_buy_threshold,
                 'sell_threshold': self.medium_trend_sell_threshold,
                 'stop_profit': self.medium_trend_stop_profit,
                 'stop_loss': self.medium_trend_stop_loss
             }
-        else:  # strong
+        elif adx_level == 'strong':
             return {
                 'base_buy_ratio': self.strong_trend_base_ratio,
-                'support_add_ratio': self.strong_trend_support_buy_ratio,  # 支撑位加仓比例（更小）
-                'resistance_reduce_ratio': self.strong_trend_resistance_sell_ratio,  # 压力位减仓比例（更大）
+                'upper_sell_ratio': self.strong_trend_upper_sell_ratio,      # 上穿上线减仓比例（更大）
+                'middle_sell_ratio': self.strong_trend_middle_sell_ratio,    # 上穿中线减仓比例（更大）
+                'lower_buy_ratio': self.strong_trend_lower_buy_ratio,        # 下穿下线加仓比例（更小）
+                'middle_buy_ratio': self.strong_trend_middle_buy_ratio,      # 下穿中线加仓比例（更小）
                 'buy_threshold': self.strong_trend_buy_threshold,
                 'sell_threshold': self.strong_trend_sell_threshold,
                 'stop_profit': self.strong_trend_stop_profit,
                 'stop_loss': self.strong_trend_stop_loss
+            }
+        else: # weak
+            return {
+                'base_buy_ratio': 0.0, # 弱趋势不买入
+                'upper_sell_ratio': self.weak_trend_sell_threshold, # 弱趋势卖出阈值
+                'middle_sell_ratio': self.weak_trend_sell_threshold, # 弱趋势卖出阈值
+                'lower_buy_ratio': 0.0, # 弱趋势不加仓
+                'middle_buy_ratio': 0.0, # 弱趋势不加仓
+                'buy_threshold': 0.0, # 弱趋势不买入
+                'sell_threshold': self.weak_trend_sell_threshold, # 弱趋势卖出阈值
+                'stop_profit': 0.0, # 弱趋势不止盈
+                'stop_loss': 0.0 # 弱趋势不止损
             }
     
     def run_strategy(self, data: pd.DataFrame) -> Dict:
@@ -843,9 +873,9 @@ class VolatileMarketStrategy:
         pending_trades = []  # 存储待执行的交易
         
         prev_row = None
-        for i, (timestamp, row) in enumerate(tqdm(data.iterrows(), 
-                                                 total=len(data), 
-                                                 desc="运行策略")):
+        for timestamp, row in tqdm(data.iterrows(), 
+                                  total=len(data), 
+                                  desc="运行策略"):
             current_price = row['close']
             current_high = row['high']
             current_low = row['low']
@@ -889,6 +919,8 @@ class VolatileMarketStrategy:
                 # 检查是否可以加仓（当天未加仓）
                 if self.can_add_position_today():
                     self.execute_buy(current_price, self.weekly_drop_buy_ratio, timestamp, f"周跌幅加仓({adx_level})")
+                    # 记录周跌幅加仓日期，用于冷却期计算
+                    self.last_weekly_drop_buy_date = timestamp.date()
                 else:
                     print(f"{timestamp}: 周跌幅加仓被阻止 - 当天已加仓")
             
@@ -900,7 +932,12 @@ class VolatileMarketStrategy:
                 if not self.can_trade_today():
                     # 当天已卖出，跳过所有交易逻辑
                     pass
-                # 只有在ADX >= 20时才执行交易（ADX < 20时不操作）
+                # ADX < 20时（弱趋势）：只执行技术指标减仓，不买入
+                elif adx_value < self.adx_low_threshold:
+                    if self.btc_amount > 0 and tech_signal <= self.weak_trend_sell_threshold:
+                        # 弱趋势技术指标减仓
+                        self.execute_sell(current_price, self.weak_trend_sell_ratio, timestamp, f"弱趋势技术指标减仓{self.weak_trend_sell_ratio:.1%}(ADX={adx_value:.1f})")
+                # ADX >= 20时才执行完整交易策略
                 elif adx_value >= self.adx_low_threshold:
                     # 获取当前ADX等级下的交易参数
                     if adx_level in ['medium', 'strong']:
@@ -928,95 +965,80 @@ class VolatileMarketStrategy:
                         if tech_signal >= ratios['buy_threshold']:
                             # 检查是否可以买入（当天未买入且未加仓）
                             if self.can_buy_today():
-                                # 检查是否同时突破压力位（信号冲突检查）
-                                support_level, resistance_level = self.get_ma_support_resistance_levels_new(row)
+                                # 检查是否同时突破肯特纳通道（信号冲突检查）
+                                breakthrough_type, breakthrough_direction = self.check_keltner_breakthrough(data, timestamp)
                                 
-                                # 如果MA数据不足，直接执行买入
-                                if support_level is None or resistance_level is None:
-                                    self.execute_buy(current_price, ratios['base_buy_ratio'], timestamp, f"合成信号买入({adx_level})")
-                                elif prev_row is not None:
-                                    break_support_down, break_resistance_up = self.check_ma_breakthrough_new(
-                                        current_high, current_low,
-                                        prev_row['high'], prev_row['low'],
-                                        support_level, resistance_level
-                                    )
-                                    
-                                    if break_resistance_up:
-                                        print(f"{timestamp}: 技术指标买入信号被阻止 - 同时突破压力位向上（信号冲突）")
-                                    else:
-                                        # 合成信号买入
-                                        self.execute_buy(current_price, ratios['base_buy_ratio'], timestamp, f"合成信号买入({adx_level})")
+                                # 如果同时上穿肯特纳通道，则不执行技术指标买入（信号冲突）
+                                if breakthrough_type in ['upper', 'middle'] and breakthrough_direction == 'up':
+                                    print(f"{timestamp}: 技术指标买入信号被阻止 - 同时上穿肯特纳{breakthrough_type}线（信号冲突）")
                                 else:
-                                    # 没有前一行数据时直接买入
+                                    # 合成信号买入
                                     self.execute_buy(current_price, ratios['base_buy_ratio'], timestamp, f"合成信号买入({adx_level})")
                             else:
                                 print(f"{timestamp}: 技术指标买入信号被阻止 - 当天已买入或加仓")
                         
                         elif tech_signal <= ratios['sell_threshold'] and self.btc_amount > 0:
-                            # 检查是否同时跌破支撑位（信号冲突检查）
-                            support_level, resistance_level = self.get_ma_support_resistance_levels_new(row)
+                            # 检查是否同时跌破肯特纳通道（信号冲突检查）
+                            breakthrough_type, breakthrough_direction = self.check_keltner_breakthrough(data, timestamp)
                             
-                            # 如果MA数据不足，直接执行卖出
-                            if support_level is None or resistance_level is None:
-                                self.execute_sell(current_price, 1.0, timestamp, f"合成信号卖出({adx_level})")
-                            elif prev_row is not None:
-                                break_support_down, break_resistance_up = self.check_ma_breakthrough_new(
-                                    current_high, current_low,
-                                    prev_row['high'], prev_row['low'],
-                                    support_level, resistance_level
-                                )
-                                
-                                if break_support_down:
-                                    print(f"{timestamp}: 技术指标卖出信号被阻止 - 同时跌破支撑位向下（信号冲突）")
-                                else:
-                                    # 合成信号卖出所有持仓
-                                    self.execute_sell(current_price, 1.0, timestamp, f"合成信号卖出({adx_level})")
+                            # 如果同时下穿肯特纳通道，则不执行技术指标卖出（信号冲突）
+                            if breakthrough_type in ['lower', 'middle'] and breakthrough_direction == 'down':
+                                print(f"{timestamp}: 技术指标卖出信号被阻止 - 同时下穿肯特纳{breakthrough_type}线（信号冲突）")
                             else:
-                                # 没有前一行数据时直接卖出
+                                # 合成信号卖出所有持仓
                                 self.execute_sell(current_price, 1.0, timestamp, f"合成信号卖出({adx_level})")
                         
-                        # 3. MA支撑压力位逻辑（只有在有持仓且有前一期数据且MA数据有效时才执行）
-                        if self.btc_amount > 0 and prev_row is not None:
-                            # 获取支撑压力位
-                            support_level, resistance_level = self.get_ma_support_resistance_levels_new(row)
-                            prev_support_level, prev_resistance_level = self.get_ma_support_resistance_levels_new(prev_row)
+                        # 3. 肯特纳通道交易逻辑（只有在有持仓时才执行）
+                        if self.btc_amount > 0:
+                            # 检查肯特纳通道突破
+                            breakthrough_type, breakthrough_direction = self.check_keltner_breakthrough(data, timestamp)
                             
-                            # 只有当前和前一期的MA数据都有效时才执行MA策略
-                            if (support_level is not None and resistance_level is not None and
-                                prev_support_level is not None and prev_resistance_level is not None):
+                            if breakthrough_type != 'none' and breakthrough_direction != 'none':
+                                if breakthrough_direction == 'up':
+                                    # 上穿肯特纳通道，执行减仓
+                                    if breakthrough_type == 'upper':
+                                        # 上穿上线，下一期开盘价减仓
+                                        current_ratio = self.get_btc_ratio()
+                                        reduce_ratio = min(ratios['upper_sell_ratio'], current_ratio)
+                                        if reduce_ratio > 0:
+                                            pending_trades.append({
+                                                'action': 'sell',
+                                                'ratio': reduce_ratio,
+                                                'reason': f"上穿肯特纳上线减仓({adx_level})"
+                                            })
+                                    elif breakthrough_type == 'middle':
+                                        # 上穿中线，下一期开盘价减仓
+                                        current_ratio = self.get_btc_ratio()
+                                        reduce_ratio = min(ratios['middle_sell_ratio'], current_ratio)
+                                        if reduce_ratio > 0:
+                                            pending_trades.append({
+                                                'action': 'sell',
+                                                'ratio': reduce_ratio,
+                                                'reason': f"上穿肯特纳中线减仓({adx_level})"
+                                            })
                                 
-                                # 检查MA突破
-                                break_support_down, break_resistance_up = self.check_ma_breakthrough_new(
-                                    current_high, current_low,
-                                    prev_row['high'], prev_row['low'],
-                                    support_level, resistance_level
-                                )
-                                
-                                if break_support_down:
-                                    # 检查是否可以加仓（当天未加仓）
-                                    if self.can_add_position_today():
-                                        # 突破支撑位向下，下一期开盘价加仓
-                                        pending_trades.append({
-                                            'action': 'buy',
-                                            'ratio': ratios['support_add_ratio'],
-                                            'reason': f"突破支撑位加仓({adx_level})"
-                                        })
-                                    else:
-                                        print(f"{timestamp}: 支撑位加仓被阻止 - 当天已加仓")
-                                
-                                elif break_resistance_up:
-                                    # 突破压力位向上，下一期开盘价减仓
-                                    current_ratio = self.get_btc_ratio()
-                                    reduce_ratio = min(ratios['resistance_reduce_ratio'], current_ratio)
-                                    if reduce_ratio > 0:
-                                        pending_trades.append({
-                                            'action': 'sell',
-                                            'ratio': reduce_ratio,
-                                            'reason': f"突破压力位减仓({adx_level})"
-                                        })
-                            else:
-                                # MA数据不足时，跳过MA支撑压力位策略
-                                pass
+                                elif breakthrough_direction == 'down':
+                                    # 下穿肯特纳通道，执行加仓
+                                    if breakthrough_type == 'lower':
+                                        # 下穿下线，检查是否可以加仓
+                                        if self.can_add_position_today():
+                                            pending_trades.append({
+                                                'action': 'buy',
+                                                'ratio': ratios['lower_buy_ratio'],
+                                                'reason': f"下穿肯特纳下线加仓({adx_level})"
+                                            })
+                                        else:
+                                            print(f"{timestamp}: 下穿肯特纳下线加仓被阻止 - 当天已加仓")
+                                    elif breakthrough_type == 'middle':
+                                        # 下穿中线，检查是否可以加仓
+                                        if self.can_add_position_today():
+                                            pending_trades.append({
+                                                'action': 'buy',
+                                                'ratio': ratios['middle_buy_ratio'],
+                                                'reason': f"下穿肯特纳中线加仓({adx_level})"
+                                            })
+                                        else:
+                                            print(f"{timestamp}: 下穿肯特纳中线加仓被阻止 - 当天已加仓")
                     
             else:
                 # 在看多或看空阶段，不执行震荡策略，但可以检查止盈止损
@@ -1043,7 +1065,7 @@ class VolatileMarketStrategy:
             prev_row = row
             
             # 记录状态
-            support_level, resistance_level = self.get_ma_support_resistance_levels_new(row)
+            keltner_lower, keltner_middle, keltner_upper = self.get_keltner_support_resistance_levels(row)
             record = {
                 'timestamp': timestamp,
                 'price': current_price,
@@ -1060,8 +1082,9 @@ class VolatileMarketStrategy:
                 'news_signal': news_signal,
                 'market_phase': self.market_phase,
                 'positions_count': len(self.positions),
-                'support_level': support_level if support_level is not None else np.nan,
-                'resistance_level': resistance_level if resistance_level is not None else np.nan,
+                'keltner_lower': keltner_lower if keltner_lower is not None else np.nan,
+                'keltner_middle': keltner_middle if keltner_middle is not None else np.nan,
+                'keltner_upper': keltner_upper if keltner_upper is not None else np.nan,
                 'weekly_drop_triggered': weekly_drop_triggered,
                 'pending_trades_count': len(pending_trades),
                 'today_bought': self.today_bought,
@@ -1069,7 +1092,9 @@ class VolatileMarketStrategy:
                 'today_sold': self.today_sold,
                 'can_buy_today': self.can_buy_today(),
                 'can_add_position_today': self.can_add_position_today(),
-                'can_trade_today': self.can_trade_today()
+                'can_trade_today': self.can_trade_today(),
+                'last_weekly_drop_buy_date': self.last_weekly_drop_buy_date,
+                'days_since_last_weekly_drop_buy': (current_date - self.last_weekly_drop_buy_date).days if self.last_weekly_drop_buy_date else None
             }
             self.records.append(record)
         
@@ -1362,13 +1387,6 @@ def main():
         adx_low_threshold=20,
         adx_high_threshold=40,
         
-        # 弱趋势参数
-        weak_trend_buy_threshold=1.3,
-        weak_trend_sell_threshold=0.7,
-        weak_trend_base_ratio=0.15,
-        weak_trend_stop_profit=0.08,
-        weak_trend_stop_loss=0.05,
-        
         # 中等趋势参数
         medium_trend_buy_threshold=1.5,
         medium_trend_sell_threshold=0.5,
@@ -1377,18 +1395,35 @@ def main():
         medium_trend_stop_loss=0.05,
         
         # 强趋势参数
-        strong_trend_buy_threshold=1.5,
-        strong_trend_sell_threshold=0.5,
+        strong_trend_buy_threshold=1.6,
+        strong_trend_sell_threshold=0.4,
         strong_trend_base_ratio=0.15,
         strong_trend_stop_profit=0.04,
         strong_trend_stop_loss=0.03,
         
-        # MA参数
-        ma_periods=[20, 30, 60],
-        medium_trend_support_buy_ratio=0.15,
-        medium_trend_resistance_sell_ratio=0.20,
-        strong_trend_support_buy_ratio=0.10,
-        strong_trend_resistance_sell_ratio=0.25
+                 # 弱趋势参数
+         weak_trend_sell_threshold=0.6,
+         weak_trend_sell_ratio=0.3,
+         
+         # 周跌幅加仓参数（含冷却期）
+         weekly_drop_cooldown_days=7,
+         
+         # 肯特纳通道参数
+        keltner_period=50,
+        keltner_atr_period=50,
+        keltner_multiplier=3.75,
+        
+        # 中等趋势肯特纳通道交易参数
+        medium_trend_upper_sell_ratio=0.20,
+        medium_trend_middle_sell_ratio=0.15,
+        medium_trend_lower_buy_ratio=0.15,
+        medium_trend_middle_buy_ratio=0.10,
+        
+        # 强趋势肯特纳通道交易参数
+        strong_trend_upper_sell_ratio=0.25,
+        strong_trend_middle_sell_ratio=0.20,
+        strong_trend_lower_buy_ratio=0.10,
+        strong_trend_middle_buy_ratio=0.08
     )
     
     # 示例数据
